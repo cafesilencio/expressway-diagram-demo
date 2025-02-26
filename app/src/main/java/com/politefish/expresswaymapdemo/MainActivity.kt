@@ -4,134 +4,240 @@ import android.Manifest.permission.ACCESS_COARSE_LOCATION
 import android.Manifest.permission.ACCESS_FINE_LOCATION
 import android.annotation.SuppressLint
 import android.content.pm.PackageManager
+import android.content.res.Resources
 import android.graphics.Bitmap
-import android.graphics.BitmapFactory
+import android.graphics.Paint
 import android.location.Location
 import android.os.Bundle
-import android.util.Log
+import android.view.View
 import androidx.appcompat.app.AppCompatActivity
+import androidx.appcompat.content.res.AppCompatResources
 import androidx.core.app.ActivityCompat
 import androidx.core.content.ContextCompat
-import com.mapbox.geojson.Feature
-import com.mapbox.geojson.FeatureCollection
+import androidx.lifecycle.lifecycleScope
 import com.mapbox.geojson.Point
-import com.mapbox.maps.CameraOptions
 import com.mapbox.maps.EdgeInsets
-import com.mapbox.maps.MapboxMap
-import com.mapbox.maps.Style
-import com.mapbox.maps.extension.style.expressions.dsl.generated.match
-import com.mapbox.maps.extension.style.layers.generated.CircleLayer
-import com.mapbox.maps.extension.style.sources.generated.GeoJsonSource
-import com.mapbox.maps.extension.style.sources.generated.geoJsonSource
-import com.mapbox.maps.extension.style.sources.getSource
 import com.mapbox.maps.plugin.LocationPuck2D
-import com.mapbox.maps.plugin.animation.MapAnimationOptions
 import com.mapbox.maps.plugin.animation.camera
 import com.mapbox.maps.plugin.locationcomponent.location
-import com.mapbox.navigation.base.ExperimentalPreviewMapboxNavigationAPI
 import com.mapbox.navigation.base.options.NavigationOptions
 import com.mapbox.navigation.base.route.NavigationRoute
 import com.mapbox.navigation.core.MapboxNavigation
-import com.mapbox.navigation.core.MapboxNavigationProvider
 import com.mapbox.navigation.core.directions.session.RoutesObserver
+import com.mapbox.navigation.core.lifecycle.MapboxNavigationApp
+import com.mapbox.navigation.core.lifecycle.MapboxNavigationObserver
+import com.mapbox.navigation.core.lifecycle.requireMapboxNavigation
 import com.mapbox.navigation.core.replay.MapboxReplayer
-import com.mapbox.navigation.core.replay.history.ReplayEventBase
+import com.mapbox.navigation.core.replay.ReplayLocationEngine
 import com.mapbox.navigation.core.replay.route.ReplayProgressObserver
 import com.mapbox.navigation.core.replay.route.ReplayRouteMapper
 import com.mapbox.navigation.core.trip.session.LocationMatcherResult
 import com.mapbox.navigation.core.trip.session.LocationObserver
 import com.mapbox.navigation.core.trip.session.RouteProgressObserver
+import com.mapbox.navigation.ui.maps.NavigationStyles
+import com.mapbox.navigation.ui.maps.camera.NavigationCamera
+import com.mapbox.navigation.ui.maps.camera.data.MapboxNavigationViewportDataSource
+import com.mapbox.navigation.ui.maps.camera.lifecycle.NavigationBasicGesturesHandler
+import com.mapbox.navigation.ui.maps.camera.transition.NavigationCameraTransitionOptions
 import com.mapbox.navigation.ui.maps.location.NavigationLocationProvider
 import com.mapbox.navigation.ui.maps.route.line.api.MapboxRouteLineApi
 import com.mapbox.navigation.ui.maps.route.line.api.MapboxRouteLineView
 import com.mapbox.navigation.ui.maps.route.line.model.MapboxRouteLineOptions
-import com.mapbox.navigation.ui.maps.route.line.model.NavigationRouteLine
-import com.mapbox.navigation.ui.maps.route.line.model.RouteLineColorResources
-import com.mapbox.navigation.ui.maps.route.line.model.RouteLineResources
+import com.mapbox.navigation.ui.utils.internal.extensions.getBitmap
 import com.politefish.expresswaymapdemo.databinding.ActivityMainBinding
-import com.politefish.expresswaymapdemo.pointmapping.ExpPoint
-import com.politefish.expresswaymapdemo.pointmapping.ExpresswayPointMap.getPoints
+import com.politefish.expresswaymapdemo.domain.model.ExpImagePuckPosition
+import com.politefish.expresswaymapdemo.domain.model.LocationAndBearing
 import com.politefish.expresswaymapdemo.support.SupportUtils.getTestRoute
-import com.politefish.expresswaymapdemo.support.SupportUtils.toAndroidLocation
-
+import com.politefish.expresswaymapdemo.viewmodel.MainActivityViewModel
+import kotlinx.coroutines.launch
+import org.koin.android.ext.android.inject
+import java.util.Date
 
 class MainActivity : AppCompatActivity() {
 
-    private lateinit var puckBitmap: Bitmap
-    private lateinit var mapboxReplayer: MapboxReplayer
-    private lateinit var replayProgressObserver: ReplayProgressObserver
-    private val replayRouteMapper by lazy { ReplayRouteMapper() }
-    private lateinit var mapboxNavigation: MapboxNavigation
     private val requiredPermissions = arrayOf(ACCESS_COARSE_LOCATION, ACCESS_FINE_LOCATION)
-
-    private val mapboxMap: MapboxMap by lazy {
-        viewBinding.mapView.getMapboxMap()
+    private val viewModel: MainActivityViewModel by inject()
+    private val mapboxReplayer = MapboxReplayer()
+    private val replayLocationEngine = ReplayLocationEngine(mapboxReplayer)
+    private val replayProgressObserver = ReplayProgressObserver(mapboxReplayer)
+    private lateinit var binding: ActivityMainBinding
+    private val navigationCamera by lazy {
+        NavigationCamera(
+            binding.mapView.getMapboxMap(),
+            binding.mapView.camera,
+            viewportDataSource
+        )
+    }
+    private val viewportDataSource: MapboxNavigationViewportDataSource by lazy {
+        MapboxNavigationViewportDataSource(binding.mapView.getMapboxMap())
     }
 
-    private val locationComponent by lazy {
-        viewBinding.mapView.location.apply {
-            setLocationProvider(navigationLocationProvider)
-            enabled = true
+    private val expresswayDiagramBitmap: Bitmap by lazy {
+        AppCompatResources.getDrawable(this, R.drawable.expressway_diagram)!!.getBitmap()
+    }
+
+    private val expresswayDiagramPuckBitmap by lazy {
+        AppCompatResources.getDrawable(this, R.drawable.arrow_icon)!!.getBitmap()
+    }
+
+    private val puckPaint = Paint().apply {
+        isAntiAlias = true
+        isFilterBitmap = true
+    }
+
+    private val pixelDensity = Resources.getSystem().displayMetrics.density
+    private val overviewPadding: EdgeInsets by lazy {
+        EdgeInsets(
+            140.0 * pixelDensity,
+            40.0 * pixelDensity,
+            120.0 * pixelDensity,
+            40.0 * pixelDensity
+        )
+    }
+
+    private val followingPadding: EdgeInsets by lazy {
+        EdgeInsets(
+            180.0 * pixelDensity,
+            40.0 * pixelDensity,
+            150.0 * pixelDensity,
+            40.0 * pixelDensity
+        )
+    }
+
+    private val mapboxRouteLineOptions by lazy {
+        MapboxRouteLineOptions.Builder(this)
+            .withRouteLineBelowLayerId("road-label-navigation")
+            .build()
+    }
+
+    private val routeLineApi by lazy {
+        MapboxRouteLineApi(mapboxRouteLineOptions)
+    }
+    private val routeLineView by lazy {
+        MapboxRouteLineView(mapboxRouteLineOptions)
+    }
+
+    private var lastLocation: LocationAndBearing? = null
+    private val navigationLocationProvider = NavigationLocationProvider()
+
+    private val locationObserver = object : LocationObserver {
+        var firstLocationUpdateReceived = false
+
+        override fun onNewRawLocation(rawLocation: Location) {
+            // not handled
+        }
+
+        override fun onNewLocationMatcherResult(locationMatcherResult: LocationMatcherResult) {
+            val enhancedLocation = locationMatcherResult.enhancedLocation
+            navigationLocationProvider.changePosition(
+                location = enhancedLocation,
+                keyPoints = locationMatcherResult.keyPoints,
+            )
+
+            viewportDataSource.onLocationChanged(enhancedLocation)
+            viewportDataSource.evaluate()
+
+            lastLocation = LocationAndBearing(
+                Point.fromLngLat(enhancedLocation.longitude, enhancedLocation.latitude),
+                enhancedLocation.bearing
+            )
+
+            if (!firstLocationUpdateReceived) {
+                firstLocationUpdateReceived = true
+                navigationCamera.requestNavigationCameraToOverview(
+                    stateTransitionOptions = NavigationCameraTransitionOptions.Builder()
+                        .maxDuration(0)
+                        .build()
+                )
+            }
         }
     }
 
+    private val routeProgressObserver = RouteProgressObserver { routeProgress ->
+        viewportDataSource.onRouteProgressChanged(routeProgress)
+        viewportDataSource.evaluate()
+
+        lastLocation?.apply {
+            viewModel.updateLocation(this)
+        }
+    }
+
+    private val routesObserver = RoutesObserver { routeUpdateResult ->
+        if (routeUpdateResult.navigationRoutes.isNotEmpty()) {
+            routeLineApi.setNavigationRoutes(
+                routeUpdateResult.navigationRoutes
+            ) { value ->
+                binding.mapView.getMapboxMap().getStyle()?.apply {
+                    routeLineView.renderRouteDrawData(this, value)
+                }
+            }
+            viewportDataSource.onRouteChanged(routeUpdateResult.navigationRoutes.first())
+            viewportDataSource.evaluate()
+        }
+    }
+
+    private val mapboxNavigation: MapboxNavigation by requireMapboxNavigation(
+        onResumedObserver = object : MapboxNavigationObserver {
+            @SuppressLint("MissingPermission")
+            override fun onAttached(mapboxNavigation: MapboxNavigation) {
+                mapboxNavigation.registerRoutesObserver(routesObserver)
+                mapboxNavigation.registerLocationObserver(locationObserver)
+                mapboxNavigation.registerRouteProgressObserver(routeProgressObserver)
+                mapboxNavigation.registerRouteProgressObserver(replayProgressObserver)
+                mapboxNavigation.startTripSession()
+            }
+
+            override fun onDetached(mapboxNavigation: MapboxNavigation) {
+                mapboxNavigation.stopTripSession()
+                mapboxNavigation.unregisterRoutesObserver(routesObserver)
+                mapboxNavigation.unregisterLocationObserver(locationObserver)
+                mapboxNavigation.unregisterRouteProgressObserver(routeProgressObserver)
+                mapboxNavigation.unregisterRouteProgressObserver(replayProgressObserver)
+            }
+        },
+        onInitialize = this::initNavigation
+    )
+
+    private val initialPoint = Point.fromLngLat(139.791604, 35.518599)
     private val navigationRoute: NavigationRoute by lazy {
         getTestRoute(this)
     }
 
-    private val navigationLocationProvider by lazy {
-        NavigationLocationProvider()
-    }
-
-    private val routeLineColorResources by lazy {
-        RouteLineColorResources.Builder().build()
-    }
-
-    private val routeLineResources: RouteLineResources by lazy {
-        RouteLineResources.Builder()
-            .routeLineColorResources(routeLineColorResources)
-            .build()
-    }
-
-    private val options: MapboxRouteLineOptions by lazy {
-        MapboxRouteLineOptions.Builder(this)
-            .withRouteLineResources(routeLineResources)
-            .withRouteLineBelowLayerId("road-label")
-            .build()
-    }
-
-    private val routeLineView by lazy {
-        MapboxRouteLineView(options)
-    }
-
-    private val routeLineApi: MapboxRouteLineApi by lazy {
-        MapboxRouteLineApi(options)
-    }
-
-    private val viewBinding: ActivityMainBinding by lazy {
-        ActivityMainBinding.inflate(layoutInflater)
-    }
-
-    private val initialPoint = getPoints().first().point
-
+    @SuppressLint("MissingPermission")
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
-        setContentView(viewBinding.root)
+        binding = ActivityMainBinding.inflate(layoutInflater)
+        setContentView(binding.root)
+        viewportDataSource.overviewPadding = overviewPadding
+        viewportDataSource.followingPadding = followingPadding
 
-        val viewOptions = BitmapFactory.Options().apply {
-            inScaled = false
+        binding.btnStart.setOnClickListener {
+            setRouteAndStartNavigation(listOf(navigationRoute))
+            binding.btnStart.visibility = View.INVISIBLE
+            binding.expresswayDiagramView.visibility = View.VISIBLE
         }
-        puckBitmap = BitmapFactory.decodeResource(
-            resources,
-            R.drawable.arrow_icon,
-            viewOptions
-        )
+
+        lifecycleScope.launch {
+            viewModel.expresswayDiagramUpdates.collect { diagramPointData ->
+                val puckPosition = ExpImagePuckPosition(
+                    diagramPointData.expPoint.getExpCoordinates().first,
+                    diagramPointData.expPoint.getExpCoordinates().second,
+                    diagramPointData.puckBearing,
+                )
+                binding.expresswayDiagramView.updateDiagramImage(
+                    expresswayDiagramBitmap,
+                    puckPosition,
+                    expresswayDiagramPuckBitmap,
+                    puckPaint,
+                )
+            }
+        }
     }
 
     override fun onStart() {
         super.onStart()
         if (permissionsGranted()) {
-            initialize()
+            initMap()
         } else {
             ActivityCompat.requestPermissions(
                 this,
@@ -141,75 +247,70 @@ class MainActivity : AppCompatActivity() {
         }
     }
 
+    private fun initMap() {
+        binding.mapView.camera.addCameraAnimationsLifecycleListener(
+            NavigationBasicGesturesHandler(navigationCamera)
+        )
+        binding.mapView.getMapboxMap().loadStyleUri(NavigationStyles.NAVIGATION_DAY_STYLE) { style ->
+            //
+        }
+    }
+
     override fun onStop() {
-        mapboxNavigation.unregisterRouteProgressObserver(replayProgressObserver)
-        mapboxNavigation.unregisterRouteProgressObserver(routeProgressObserver)
-        mapboxNavigation.unregisterRoutesObserver(routesObserver)
-        mapboxNavigation.unregisterLocationObserver(locationObserver)
+        clearRouteAndStopNavigation()
         super.onStop()
     }
-
     override fun onDestroy() {
+        super.onDestroy()
+        mapboxReplayer.finish()
         routeLineApi.cancel()
         routeLineView.cancel()
-        mapboxReplayer.finish()
-        MapboxNavigationProvider.destroy()
-        super.onDestroy()
     }
 
-    private fun initialize() {
-        initStyle()
-        locationComponent.locationPuck = LocationPuck2D(
-            null,
-            ContextCompat.getDrawable(this@MainActivity, R.drawable.navigation_puck_icon),
-            null,
-            null
-        )
-        navigationLocationProvider.lastLocation
-
-        initNavigation()
-        val startingLocation = com.mapbox.common.location.Location.Builder()
-            .latitude(initialPoint.latitude())
-            .longitude(initialPoint.longitude())
-            .source("ReplayRoute")
-            .build()
-        navigationLocationProvider.changePosition(startingLocation.toAndroidLocation())
-        viewBinding.btnStart.setOnClickListener {
-            startSimulation()
-        }
-    }
-
-    private fun initStyle() {
-        mapboxMap.loadStyleUri(Style.MAPBOX_STREETS) { style ->
-            val cameraOptions = CameraOptions.Builder().center(initialPoint).zoom(14.0).build()
-            mapboxMap.setCamera(cameraOptions)
-
-
-            tempShowPoints(style, getPoints())
-            initTestRoute()
-        }
-    }
-
-    @OptIn(ExperimentalPreviewMapboxNavigationAPI::class)
     private fun initNavigation() {
-        mapboxNavigation = MapboxNavigationProvider.create(
-            NavigationOptions.Builder(this).accessToken(getString(R.string.mapbox_access_token)).build()
-        ).apply {
-            registerRoutesObserver(routesObserver)
-            registerLocationObserver(locationObserver)
+        MapboxNavigationApp.setup(
+            NavigationOptions.Builder(this)
+                .accessToken(getString(R.string.mapbox_access_token))
+                .locationEngine(replayLocationEngine)
+                .build()
+        )
+
+        binding.mapView.location.apply {
+            setLocationProvider(navigationLocationProvider)
+            this.locationPuck = LocationPuck2D(
+                bearingImage = ContextCompat.getDrawable(
+                    this@MainActivity,
+                    R.drawable.navigation_puck_icon
+                )
+            )
+            enabled = true
         }
-        mapboxReplayer = mapboxNavigation.mapboxReplayer
-        replayProgressObserver = ReplayProgressObserver(mapboxReplayer)
-        mapboxNavigation.registerRouteProgressObserver(replayProgressObserver)
+
+        replayOriginLocation()
     }
 
-    private val routesObserver: RoutesObserver = RoutesObserver { result ->
-        val routes = result.navigationRoutes.map { NavigationRouteLine(it, null) }
-        routeLineApi.setNavigationRouteLines(routes) { value ->
-            mapboxMap.getStyle()?.apply {
-                routeLineView.renderRouteDrawData(this, value)
-            }
-        }
+    private fun replayOriginLocation() {
+        mapboxReplayer.pushEvents(
+            listOf(
+                ReplayRouteMapper.mapToUpdateLocation(
+                    Date().time.toDouble(),
+                    initialPoint
+                )
+            )
+        )
+        mapboxReplayer.playFirstLocation()
+        mapboxReplayer.playbackSpeed(5.0)
+    }
+
+    private fun setRouteAndStartNavigation(routes: List<NavigationRoute>) {
+        mapboxNavigation.setNavigationRoutes(routes)
+        navigationCamera.requestNavigationCameraToOverview()
+    }
+
+    private fun clearRouteAndStopNavigation() {
+        mapboxNavigation.setNavigationRoutes(listOf())
+
+        mapboxReplayer.stop()
     }
 
     private fun permissionsGranted(): Boolean {
@@ -223,122 +324,6 @@ class MainActivity : AppCompatActivity() {
         }
         return true
     }
-
-    private fun initTestRoute() {
-        routeLineApi.setNavigationRoutes(listOf(navigationRoute)) { resp ->
-            mapboxMap.getStyle()?.apply {
-                routeLineView.renderRouteDrawData(this, resp)
-            }
-        }
-    }
-
-    private val locationObserver = object : LocationObserver {
-        override fun onNewLocationMatcherResult(locationMatcherResult: LocationMatcherResult) {
-            navigationLocationProvider.changePosition(
-                locationMatcherResult.enhancedLocation,
-                locationMatcherResult.keyPoints,
-            )
-            updateCamera(
-                com.mapbox.common.location.Location.Builder()
-                    .latitude(locationMatcherResult.enhancedLocation.latitude)
-                    .longitude(locationMatcherResult.enhancedLocation.longitude)
-                    .timestamp(locationMatcherResult.enhancedLocation.time)
-                    .build()
-            )
-        }
-
-        override fun onNewRawLocation(rawLocation: Location) {
-            //
-        }
-    }
-
-    private fun updateCamera(location: com.mapbox.common.location.Location) {
-        val mapAnimationOptionsBuilder = MapAnimationOptions.Builder()
-        val cameraBuilder = CameraOptions.Builder()
-            .center(Point.fromLngLat(location.longitude, location.latitude))
-            .pitch(45.0)
-            .zoom(14.0)
-            .padding(EdgeInsets(1000.0, 0.0, 0.0, 0.0))
-        location.bearing?.let { actualBearing ->
-            cameraBuilder.bearing(actualBearing)
-        }
-        viewBinding.mapView.camera.easeTo(
-            cameraBuilder.build(),
-            mapAnimationOptionsBuilder.build()
-        )
-    }
-
-    @OptIn(ExperimentalPreviewMapboxNavigationAPI::class)
-    @SuppressLint("MissingPermission")
-    private fun startSimulation() {
-        mapboxNavigation.registerRouteProgressObserver(routeProgressObserver)
-        mapboxNavigation.startReplayTripSession(withForegroundService = false)
-
-        mapboxReplayer.stop()
-        mapboxReplayer.clearEvents()
-        mapboxReplayer.pushRealLocation(this, 0.0)
-        mapboxReplayer.playbackSpeed(2.0) // todo what is a good speed?
-        val replayData: List<ReplayEventBase> = replayRouteMapper.mapDirectionsRouteGeometry(navigationRoute.directionsRoute)
-        mapboxReplayer.pushEvents(replayData)
-        mapboxReplayer.seekTo(replayData[0])
-        mapboxReplayer.play()
-    }
-
-    private val routeProgressObserver = RouteProgressObserver { routeProgress ->
-        routeLineApi.updateWithRouteProgress(routeProgress) { result ->
-            mapboxMap.getStyle()?.apply {
-                routeLineView.renderRouteLineUpdate(this, result)
-            }
-        }
-    }
-
-    // todo remove this
-    private val LINE_END_LAYER_ID = "DRAW_UTIL_LINE_END_LAYER_ID"
-    private val LINE_END_SOURCE_ID = "DRAW_UTIL_LINE_END_SOURCE_ID"
-    private val LINE_END_POINT_TYPE = "LINE_END_POINT_TYPE"
-    private fun tempShowPoints(style: Style, points: List<ExpPoint>) {
-        if (!style.styleSourceExists(LINE_END_SOURCE_ID)) {
-            geoJsonSource(LINE_END_SOURCE_ID) {}.bindTo(style)
-        }
-
-        if (!style.styleLayerExists(LINE_END_LAYER_ID)) {
-            CircleLayer(LINE_END_LAYER_ID, LINE_END_SOURCE_ID)
-                .circleRadius(
-                    match {
-                        get {
-                            literal(LINE_END_POINT_TYPE)
-                        }
-                        literal("key")
-                        literal(7.0)
-                        literal(4.0)
-                    }
-                )
-                .circleOpacity(1.0)
-                .circleColor(
-                    match {
-                        get {
-                            literal(LINE_END_POINT_TYPE)
-                        }
-                        literal("key")
-                        rgb(0.0, 0.0, 255.0)
-                        rgb(0.0, 0.0, 0.0)
-                    }
-                )
-                .bindTo(style)
-        }
-
-        val features = points.map {
-            Feature.fromGeometry(it.point).apply {
-                addStringProperty(LINE_END_POINT_TYPE, if (it is ExpPoint.KeyPoint) "key" else "tween")
-            }
-        }
-
-        (mapboxMap.getStyle()?.getSource(LINE_END_SOURCE_ID) as GeoJsonSource).apply {
-            this.featureCollection(FeatureCollection.fromFeatures(features))
-        }
-    }
-
-
 
     private companion object {
         private const val PERMISSION_REQUEST_CODE = 111

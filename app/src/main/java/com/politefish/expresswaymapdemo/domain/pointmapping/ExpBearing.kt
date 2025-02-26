@@ -1,4 +1,4 @@
-package com.politefish.expresswaymapdemo.pointmapping
+package com.politefish.expresswaymapdemo.domain.pointmapping
 
 sealed class ExpBearing {
 

@@ -9,15 +9,15 @@ Initially there was a non-trivial amount of work to map the pixel coordinates fo
 
 At runtime: 
 
-The pixel/location mappings for the area around the driver are loaded.
+* The pixel/location mappings for the area around the driver are loaded.
 
-A more dense road geometry is generated and the pixel coordinates between the start end endpoints for road sections on the diagram are interpolated.
+* A more dense road geometry is generated and the pixel coordinates between the start end endpoints for road sections on the diagram are interpolated.
 
-These pixel/location mappings are loaded into a search tree.
+* These pixel/location mappings are loaded into a search tree.
 
-During navigation the location updates are used to search for the nearest mapping to the driver's postion in order to derive the pixel location for the icon representing the driver on the diagram. 
+* During navigation the location updates are used to search for the nearest mapping to the driver's postion in order to derive the pixel location for the icon representing the driver on the diagram. 
 
-The diagram is updated with the driver's position.
+* The diagram is updated with the driver's position.
 
 
 Omitted from the demo is a check to determine when the driver is actually on an expressway. The demo uses a static route on an expressway.

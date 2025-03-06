@@ -27,11 +27,11 @@ sealed class ExpBearing {
     abstract fun getDirectionMask(): Int
 
     object Vertical : ExpBearing() {
-        override fun getDirectionMask(): Int = up or down
+        override fun getDirectionMask(): Int = UP or DOWN
     }
 
     object VerticalRotateCCW45 : ExpBearing() {
-        override fun getDirectionMask(): Int = up or down
+        override fun getDirectionMask(): Int = UP or DOWN
 
         override fun isInUpRange(bearing: Int): Boolean {
             val rangeA = IntRange(0, 45)
@@ -45,7 +45,7 @@ sealed class ExpBearing {
     }
 
     object VerticalRotateCW45 : ExpBearing() {
-        override fun getDirectionMask(): Int = up or down
+        override fun getDirectionMask(): Int = UP or DOWN
 
         override fun isInUpRange(bearing: Int): Boolean {
             val rangeA = IntRange(0, 135)
@@ -59,11 +59,11 @@ sealed class ExpBearing {
     }
 
     object Horizontal : ExpBearing() {
-        override fun getDirectionMask(): Int = left or right
+        override fun getDirectionMask(): Int = LEFT or RIGHT
     }
 
     object HorizontalRotateCCW45 : ExpBearing() {
-        override fun getDirectionMask(): Int = left or right
+        override fun getDirectionMask(): Int = LEFT or RIGHT
 
         override fun isInRightRange(bearing: Int): Boolean {
             val rangeA = IntRange(0, 45)
@@ -77,7 +77,7 @@ sealed class ExpBearing {
     }
 
     object HorizontalRotateCCW90 : ExpBearing() {
-        override fun getDirectionMask(): Int = left or right
+        override fun getDirectionMask(): Int = LEFT or RIGHT
 
         override fun isInRightRange(bearing: Int): Boolean {
             val rangeA = IntRange(0, 90)
@@ -91,11 +91,11 @@ sealed class ExpBearing {
     }
 
     object UpRightDownLeft : ExpBearing() {
-        override fun getDirectionMask(): Int = upRight or downLeft
+        override fun getDirectionMask(): Int = UPRIGHT or DOWNLEFT
     }
 
     object UpRightDownLeftRotateCW45 : ExpBearing() {
-        override fun getDirectionMask(): Int = upRight or downLeft
+        override fun getDirectionMask(): Int = UPRIGHT or DOWNLEFT
         override fun isInUpRange(bearing: Int): Boolean {
             return IntRange(45, 225).contains(bearing)
         }
@@ -108,11 +108,11 @@ sealed class ExpBearing {
     }
 
     object UpLeftDownRight : ExpBearing() {
-        override fun getDirectionMask(): Int = upLeft or downRight
+        override fun getDirectionMask(): Int = UPLEFT or DOWNRIGHT
     }
 
     object UpLeftDownRightRotateCCW45 : ExpBearing() {
-        override fun getDirectionMask(): Int = upLeft or downRight
+        override fun getDirectionMask(): Int = UPLEFT or DOWNRIGHT
 
         override fun isInUpRange(bearing: Int): Boolean {
             val rangeA = IntRange(0, 45)
@@ -130,10 +130,10 @@ sealed class ExpBearing {
     }
 
     fun translateBearing(bearing: Float): Float {
-        val upRightDownLeft = upRight or downLeft
-        val upLeftDownRight = upLeft or downRight
-        val upDown = up or down
-        val rightLeft = right or left
+        val upRightDownLeft = UPRIGHT or DOWNLEFT
+        val upLeftDownRight = UPLEFT or DOWNRIGHT
+        val upDown = UP or DOWN
+        val rightLeft = RIGHT or LEFT
 
         val bearingAsInt = bearing.toInt()
         return when (getDirectionMask()) {
@@ -177,13 +177,13 @@ sealed class ExpBearing {
     }
 
     private companion object {
-        private const val up = 1
-        private const val down = 2
-        private const val left = 4
-        private const val right = 8
-        private const val upRight = 16
-        private const val downRight = 32
-        private const val upLeft = 64
-        private const val downLeft = 128
+        private const val UP = 1
+        private const val DOWN = 2
+        private const val LEFT = 4
+        private const val RIGHT = 8
+        private const val UPRIGHT = 16
+        private const val DOWNRIGHT = 32
+        private const val UPLEFT = 64
+        private const val DOWNLEFT = 128
     }
 }

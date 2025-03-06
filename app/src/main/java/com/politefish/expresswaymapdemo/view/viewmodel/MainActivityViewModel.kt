@@ -1,4 +1,4 @@
-package com.politefish.expresswaymapdemo.viewmodel
+package com.politefish.expresswaymapdemo.view.viewmodel
 
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope

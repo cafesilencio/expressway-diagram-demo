@@ -1,4 +1,4 @@
-package com.politefish.expresswaymapdemo
+package com.politefish.expresswaymapdemo.view
 
 import android.Manifest.permission.ACCESS_COARSE_LOCATION
 import android.Manifest.permission.ACCESS_FINE_LOCATION
@@ -44,11 +44,12 @@ import com.mapbox.navigation.ui.maps.route.line.api.MapboxRouteLineApi
 import com.mapbox.navigation.ui.maps.route.line.api.MapboxRouteLineView
 import com.mapbox.navigation.ui.maps.route.line.model.MapboxRouteLineOptions
 import com.mapbox.navigation.ui.utils.internal.extensions.getBitmap
+import com.politefish.expresswaymapdemo.R
 import com.politefish.expresswaymapdemo.databinding.ActivityMainBinding
 import com.politefish.expresswaymapdemo.domain.model.ExpImagePuckPosition
 import com.politefish.expresswaymapdemo.domain.model.LocationAndBearing
 import com.politefish.expresswaymapdemo.support.SupportUtils.getTestRoute
-import com.politefish.expresswaymapdemo.viewmodel.MainActivityViewModel
+import com.politefish.expresswaymapdemo.view.viewmodel.MainActivityViewModel
 import kotlinx.coroutines.launch
 import org.koin.android.ext.android.inject
 import java.util.Date

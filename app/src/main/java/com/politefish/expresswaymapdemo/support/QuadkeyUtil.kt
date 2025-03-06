@@ -8,8 +8,8 @@ import kotlin.math.sin
 
 object QuadkeyUtil {
 
-    private const val degToRad = Math.PI / 180.0
-    private const val maxZoom = 25.0
+    private const val DEG_TO_RAD = Math.PI / 180.0
+    private const val MAX_ZOOM = 25.0
 
     fun getQuadkey(point: Point, zoom: Int): String {
         val tileId = getTileId(point, zoom)
@@ -17,9 +17,9 @@ object QuadkeyUtil {
     }
 
     private fun getTileId(point: Point, zoom: Int): TileID {
-        val zoomTarget = clamp(zoom.toDouble(), 0.0, maxZoom)
+        val zoomTarget = clamp(zoom.toDouble(), 0.0, MAX_ZOOM)
         val n = 2.0.pow(zoomTarget)
-        val sin = sin(point.latitude() * degToRad)
+        val sin = sin(point.latitude() * DEG_TO_RAD)
         var x = n * (point.longitude() / 360.0 + 0.5)
         var y = n * (0.5 - 0.25 * ln((1 + sin) / (1 - sin)) / Math.PI)
         x %= n

@@ -3,6 +3,7 @@ package com.politefish.expresswaymapdemo.domain
 import com.mapbox.geojson.Point
 import com.mapbox.turf.TurfConstants
 import com.mapbox.turf.TurfMeasurement
+import com.politefish.expresswaymapdemo.domain.locationsearch.ExpRouteSegment
 import com.politefish.expresswaymapdemo.domain.locationsearch.LocationSearchTree
 import com.politefish.expresswaymapdemo.domain.locationsearch.LocationSearchUtil
 import com.politefish.expresswaymapdemo.domain.model.LocationAndBearing
@@ -17,14 +18,32 @@ class GetLocationMatchUseCase(private val locationSearchTree: LocationSearchTree
     private val mutex = Mutex()
 
     suspend operator fun invoke(locationData: LocationAndBearing): PointData {
-        val segments = if (currentQuadrants.isEmpty()) {
-            ExpresswayPointMap.getSegmentsRelatedToPoint(locationData.point)
-        } else if (!pointInQuadrants(locationData.point, currentQuadrants)) {
-            ExpresswayPointMap.getSegmentsRelatedToPoint(locationData.point)
-        } else {
-            listOf()
+        when {
+            currentQuadrants.isEmpty() -> {
+                ExpresswayPointMap.getSegmentsRelatedToPoint(locationData.point).apply {
+                    println("foobar ${locationData.point.latitude()}")
+                    resetSearchTree(this)
+                }
+            }
+            !pointInQuadrants(locationData.point, currentQuadrants) -> {
+                ExpresswayPointMap.getSegmentsRelatedToPoint(locationData.point).apply {
+                    println("foobar ${locationData.point.latitude()}")
+                    resetSearchTree(this)
+                }
+            }
         }
 
+        val nearestPoint = locationSearchTree.getNearestNeighbor(locationData.point)
+        val closestKeyPoint = ExpPoint.KeyPoint(
+            nearestPoint.point,
+            nearestPoint.getExpCoordinates(),
+            nearestPoint.getPuckBearing(),
+            nearestPoint.getMaxDistanceDelta()
+        )
+        return calculatePointData(closestKeyPoint, locationData.point, locationData.bearing)
+    }
+
+    private suspend fun resetSearchTree(segments: List<ExpRouteSegment>) {
         mutex.withLock {
             // Prune and populate the search tree if the incoming point
             // indicates a change in the current quadrants already loaded.
@@ -40,15 +59,6 @@ class GetLocationMatchUseCase(private val locationSearchTree: LocationSearchTree
                 }
             }
         }
-
-        val nearestPoint = locationSearchTree.getNearestNeighbor(locationData.point)
-        val closestKeyPoint = ExpPoint.KeyPoint(
-            nearestPoint.point,
-            nearestPoint.getExpCoordinates(),
-            nearestPoint.getPuckBearing(),
-            nearestPoint.getMaxDistanceDelta()
-        )
-        return calculatePointData(closestKeyPoint, locationData.point, locationData.bearing)
     }
 
     private fun pointInQuadrants(point: Point, quadrants: Set<String>): Boolean {

@@ -9,6 +9,7 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.async
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.MutableSharedFlow
+import kotlinx.coroutines.flow.asSharedFlow
 import kotlinx.coroutines.launch
 
 class MainActivityViewModel(
@@ -16,7 +17,7 @@ class MainActivityViewModel(
 ): ViewModel() {
 
     private val expresswayDiagramSink: MutableSharedFlow<PointData> = MutableSharedFlow()
-    val expresswayDiagramUpdates:Flow<PointData> = expresswayDiagramSink
+    val expresswayDiagramUpdates = expresswayDiagramSink.asSharedFlow()
 
     fun updateLocation(locationData: LocationAndBearing) {
         viewModelScope.launch {
